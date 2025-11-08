@@ -1,8 +1,6 @@
 \documentclass[12pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{booktabs}
@@ -13,8 +11,8 @@
 \vspace{0.3cm}
 \large DDA4220 Deep Learning - Midterm Report}
 
-\author{Lin Boyi 123090327}
-\date{November 8, 2025}
+\author{Lambert Lin}
+\date{November 8, 2024}
 
 \begin{document}
 
@@ -44,7 +42,7 @@ Our project proposes a \textbf{knowledge distillation framework} that transforms
 \subsection{Research Contributions}
 
 \begin{enumerate}
-    \item \textbf{CNN-MLP Distillation Framework}: Theoretical and empirical analysis of why CNN temporal features can be learned by position-aware MLPs.
+    \item \textbf{CNN�MLP Distillation Framework}: Theoretical and empirical analysis of why CNN temporal features can be learned by position-aware MLPs.
     \item \textbf{zkML Optimization Pipeline}: Combining polynomial activation replacement and Hessian-guided adaptive quantization.
     \item \textbf{Comprehensive Benchmarking}: End-to-end evaluation of accuracy retention vs. proof generation speedup using the EZKL framework.
 \end{enumerate}
@@ -66,8 +64,8 @@ The seminal work introduced the concept of ``dark knowledge'' --- soft probabili
 
 Demonstrated that shallow MLPs can mimic deep CNN behavior through distillation:
 \begin{itemize}
-    \item Experimented with VGG-16 $\to$ MLP (CIFAR-10, ImageNet).
-    \item Achieved 87\% accuracy retention with 10$\to$ parameter reduction.
+    \item Experimented with VGG-16 � MLP (CIFAR-10, ImageNet).
+    \item Achieved 87\% accuracy retention with 10� parameter reduction.
     \item Revealed that CNNs learn compositional features, but final representations are often linearly separable.
 \end{itemize}
 
@@ -207,11 +205,11 @@ Speedup & $S$ & $\frac{T_{\text{prove}}^{\text{CNN}}}{T_{\text{prove}}^{\text{ML
 \toprule
 \textbf{\#} & \textbf{Experiment} & \textbf{Goal} & \textbf{Week} \\
 \midrule
-0 & CNN Teacher Baseline & Establish performance upper bound & Week 10 \\
-1 & CNN$\to$MLP Distillation & Validate knowledge transfer & Week 11 \\
-2 & Polynomial Activation & Reduce constraints while maintaining accuracy & Week 12 \\
-3 & Adaptive Quantization & Further constraint reduction via Hessian-guided bit-width allocation & Week 12 \\
-4 & EZKL Compilation & Measure end-to-end zkML performance & Week 13 \\
+0 & CNN Teacher Baseline & Establish performance upper bound & Week 7 \\
+1 & CNN�MLP Distillation & Validate knowledge transfer & Week 8 \\
+2 & Polynomial Activation & Reduce constraints while maintaining accuracy & Week 9 \\
+3 & Adaptive Quantization & Further constraint reduction via Hessian-guided bit-width allocation & Week 9 \\
+4 & EZKL Compilation & Measure end-to-end zkML performance & Week 10 \\
 \bottomrule
 \end{tabular}
 \caption{Experiment Roadmap}
@@ -298,20 +296,20 @@ BUY (2) & 160,637 (23.5\%) & 38,563 (26.4\%) & 40,616 (27.8\%) \\
 \textbf{Code Repository Structure}:
 \begin{verbatim}
 VeriRegime/
- src/
-    data_collection.py      # Binance API data fetching
-    data_split.py            # Train/val/test splitting
-    relabel_data.py          # Label threshold optimization
-    train_cnn.py             # CNN training script
-    models/
-       cnn_teacher.py       # CNN architecture
-    data/
-        dataset.py           # PyTorch Dataset (sliding window)
- data/
-    btc_usdt_1m_processed.csv
-    train.csv, val.csv, test.csv
- models/                      # Saved model checkpoints
- results/                     # Training logs and visualizations
+   src/
+      data_collection.py      # Binance API data fetching
+      data_split.py            # Train/val/test splitting
+      relabel_data.py          # Label threshold optimization
+      train_cnn.py             # CNN training script
+      models/
+         cnn_teacher.py       # CNN architecture
+      data/
+          dataset.py           # PyTorch Dataset (sliding window)
+   data/
+      btc_usdt_1m_processed.csv
+      train.csv, val.csv, test.csv
+   models/                      # Saved model checkpoints
+   results/                     # Training logs and visualizations
 \end{verbatim}
 
 \textbf{Technical Stack}:
@@ -359,8 +357,8 @@ VeriRegime/
 
     \item \textbf{Increase Model Capacity}:
     \begin{itemize}
-        \item Add a third convolutional layer (128 $\to$ 256 filters)
-        \item Increase FC layer width (128 $\to$ 256)
+        \item Add a third convolutional layer (128 � 256 filters)
+        \item Increase FC layer width (128 � 256)
         \item Target: 50--100K parameters (still reasonable for zkML baseline)
     \end{itemize}
 
@@ -410,12 +408,12 @@ VeriRegime/
 \toprule
 \textbf{Week} & \textbf{Status} & \textbf{Tasks} \\
 \midrule
-Week 10 & \textcolor{orange}{Ongoing} & CNN baseline training + debugging \\
-Week 11 & \textcolor{blue}{Planned} & MLP Student + Distillation (Exp 1) \\
-Week 12 & \textcolor{blue}{Planned} & Polynomial Activation (Exp 2) + Quantization (Exp 3) \\
-Week 13 & \textcolor{blue}{Planned} & EZKL Compilation (Exp 4) \\
-Week 14--15 & \textcolor{blue}{Planned} & Analysis, Pareto optimization, report writing \\
-Week 16 & \textcolor{blue}{Planned} & Final report submission \\
+Week 7 & \textcolor{orange}{Ongoing} & CNN baseline training + debugging \\
+Week 8 & \textcolor{blue}{Planned} & MLP Student + Distillation (Exp 1) \\
+Week 9 & \textcolor{blue}{Planned} & Polynomial Activation (Exp 2) + Quantization (Exp 3) \\
+Week 10 & \textcolor{blue}{Planned} & EZKL Compilation (Exp 4) \\
+Week 11--12 & \textcolor{blue}{Planned} & Analysis, Pareto optimization, report writing \\
+Week 13 & \textcolor{blue}{Planned} & Final report submission \\
 \bottomrule
 \end{tabular}
 \caption{Updated Timeline}
