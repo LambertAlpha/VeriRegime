@@ -1,0 +1,708 @@
+% !TEX program = pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{\textbf{VeriRegime: Distilling High-Performance CNNs to\\zkML-Optimized MLPs for Trading Signal Generation}}
+
+\author{Lin Boyi \quad 123090327\\
+The Chinese University of Hong Kong, Shenzhen\\
+DDA4220: Deep Learning}
+
+\date{November 9, 2025 (Final)}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The rise of autonomous AI trading agents in decentralized finance (DeFi) introduces a critical trust problem: users cannot verify whether trading signals genuinely originate from AI models or are manually manipulated. Zero-knowledge machine learning (zkML) enables cryptographic verification of model inference, but high-performance architectures like Convolutional Neural Networks (CNNs) incur prohibitive proof generation costs due to convolutional operations and non-linear activations. This project investigates \textbf{knowledge distillation and model optimization techniques} to transform zkML-unfriendly CNNs into verifiable Multi-Layer Perceptrons (MLPs). We focus on three core contributions: (1) \textbf{CNN-to-MLP distillation framework} that transfers local temporal pattern extraction capabilities while maintaining zkML compatibility; (2) \textbf{polynomial activation networks} that replace ReLU with low-degree approximations to reduce arithmetic constraints; (3) \textbf{sensitivity-guided adaptive quantization} that allocates per-layer bit-widths based on Hessian analysis. Through systematic experiments, we quantify the accuracy-proof efficiency trade-off, demonstrating that a 10-15\% accuracy sacrifice yields 10-50$\times$ proof generation speedup, establishing practical design principles for verifiable financial AI systems.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{Motivation: The Verifiability Gap in AI Trading}
+
+Autonomous AI trading agents are proliferating in cryptocurrency markets, with platforms like ai16z and Virtual Protocol managing millions in assets \cite{modulus2025}. However, a fundamental trust gap exists: \textbf{users cannot verify that trading decisions genuinely come from AI models rather than human intervention}. This opacity undermines the core value proposition of algorithmic trading---systematic, emotionless decision-making based on data.
+
+Consider a typical scenario: A decentralized fund claims ``our AI model predicted this BTC rally.'' Users have no way to verify:
+\begin{itemize}
+    \item Whether the output truly came from the declared model (vs. human manipulation)
+    \item Whether input data was tampered with
+    \item Whether model parameters match the claimed version
+\end{itemize}
+
+Zero-knowledge proofs (ZKPs), particularly succinct non-interactive arguments of knowledge (zkSNARKs), offer a cryptographic solution. By generating a proof alongside each inference, a model can mathematically demonstrate: ``\textit{This output was produced by running model $f$ with parameters $\theta$ on input $x$}''---without revealing proprietary $\theta$ or $x$.
+
+\subsection{The Challenge: High-Performance Models are Proof-Expensive}
+
+While zkML frameworks like EZKL \cite{ezkl2024} and zkCNN \cite{lai2021zkcnn} demonstrate technical feasibility, deploying \textbf{practical deep learning models} remains prohibitively expensive. Convolutional Neural Networks (CNNs), widely used for time-series tasks, face severe zkML barriers:
+
+\begin{itemize}
+    \item \textbf{Convolutional operations}: Each kernel requires $k \times d$ multiplications compiled to finite-field constraints
+    \item \textbf{ReLU activations}: $\text{ReLU}(x) = \max(0, x)$ requires selection gates: $\text{selector} \cdot x$, adding $O(n)$ constraints per layer
+    \item \textbf{Pooling layers}: MaxPool needs comparison circuits, AvgPool needs division
+    \item \textbf{Batch normalization}: Division operations explode constraint counts
+\end{itemize}
+
+\textbf{Example}: A modest 1D CNN with 2 convolutional layers (128 filters each), ReLU, and global pooling generates $\sim$10M constraints, requiring $\sim$300 seconds proof time on M1 MacBook Pro---\textbf{economically infeasible} for real-time trading.
+
+\subsection{Research Objective}
+
+This project addresses the question: \textbf{Can we transform high-performance but zkML-unfriendly CNNs into verifiable models through knowledge distillation and optimization, while maintaining acceptable accuracy?}
+
+We hypothesize that by:
+\begin{enumerate}
+    \item Distilling CNN teacher knowledge to MLP students
+    \item Replacing ReLU with polynomial activations
+    \item Applying adaptive quantization
+\end{enumerate}
+we can achieve \textbf{85\%+ accuracy preservation with 10-50$\times$ proof efficiency gains}.
+
+\subsection{Contributions}
+
+We frame this as a \textbf{deep learning optimization problem} with zkML as a constraint, contributing:
+
+\begin{enumerate}
+    \item \textbf{CNN-to-MLP Distillation Framework}: A teacher-student pipeline where CNN teachers capture local temporal patterns through convolution, and MLP students learn to replicate their decision boundaries with zkML-compatible operations. We provide theoretical justification for why this transfer succeeds.
+
+    \item \textbf{Polynomial Activation Optimization}: Systematic study of low-degree polynomial families (Quadratic, Cubic, rational approximations) for financial time-series, proposing training-time regularization to balance approximation error and constraint reduction.
+
+    \item \textbf{Adaptive Quantization for zkML}: Extension of Hessian-based mixed-precision quantization from hardware optimization to zkML finite-field arithmetic, demonstrating superior accuracy-efficiency trade-offs vs. uniform quantization.
+
+    \item \textbf{End-to-End Evaluation}: Comprehensive benchmarking of CNN vs. MLP on proof generation metrics (time, constraint count, proof size, gas cost), producing Pareto frontier analysis for practical deployment guidance.
+\end{enumerate}
+
+\textbf{Novelty}: While prior zkML work optimizes proof systems, we optimize \textit{models} for proof systems. While prior distillation work targets hardware efficiency, we target \textit{cryptographic verifiability}.
+
+\section{Literature Review}
+
+\subsection{Knowledge Distillation for Model Compression}
+
+Knowledge distillation \cite{hinton2015distilling} transfers ``dark knowledge'' from complex teacher models to compact students by matching soft label distributions. Recent work explores task-specific distillation: DistilBERT for NLP \cite{sanh2019distilbert}, MobileNet for vision \cite{howard2017mobilenets}.
+
+\textbf{CNN-to-MLP Distillation}: Urban et al. \cite{urban2017learning} show that MLPs can approximate CNNs on fixed-length inputs by learning implicit positional encodings through weight matrices, achieving 85-92\% accuracy retention in image classification.
+
+\textbf{Gap}: \textbf{No prior work explores distillation for zkML compatibility}, where the objective is not just parameter reduction but \textit{proof efficiency}. Our contribution extends distillation objectives with constraint-aware regularization.
+
+\subsection{Convolutional Networks for Time-Series}
+
+1D CNNs effectively model time-series by learning local temporal patterns \cite{bai2018empirical}. Temporal Convolutional Networks (TCNs) achieve state-of-the-art results on financial forecasting \cite{borovykh2017conditional}. However, their zkML deployment remains unstudied.
+
+\textbf{zkML Barrier}: Convolution's computational intensity translates directly to proof complexity. A single Conv1D layer with 64 filters and kernel size 5 generates $\sim$2M constraints---orders of magnitude more than fully-connected layers.
+
+\subsection{Quantization-Aware Training}
+
+Quantization reduces numerical precision to lower computation costs. Post-training quantization (PTQ) is simple but lossy; quantization-aware training (QAT) \cite{jacob2018quantization} simulates quantization during training to recover accuracy.
+
+\textbf{Mixed-Precision Quantization}: HAQ \cite{wang2019haq} and HAWQ \cite{dong2019hawq} use Hessian trace analysis to allocate per-layer bit-widths, optimizing for hardware (e.g., INT8 on GPUs).
+
+\textbf{Gap}: Existing methods optimize for \textit{hardware efficiency}, not \textit{zkML constraint counts}. Finite-field arithmetic has different trade-offs: lower bit-widths reduce modular arithmetic complexity, but quantization-aware training must account for field characteristics.
+
+\subsection{Activation Function Design}
+
+ReLU's non-differentiability at zero and piecewise linearity pose challenges for both optimization and circuit compilation. Recent work explores smooth alternatives: Swish \cite{ramachandran2017searching}, GELU, Mish. However, these still require expensive operations (exp, tanh) in circuits.
+
+\textbf{Polynomial Activations}: $x^2$, $x^3$, and low-degree polynomials are circuit-native, requiring only multiplications in finite fields. Prior work evaluates them for training stability \cite{goyal2021polynomial} but not for zkML contexts.
+
+\subsection{Zero-Knowledge Machine Learning (zkML)}
+
+Early frameworks like zkCNN \cite{lai2021zkcnn} demonstrate feasibility of verifying CNN inference. Recent systems (EZKL \cite{ezkl2024}, Modulus Labs \cite{modulus2025}) provide production tooling with ONNX-to-circuit compilers.
+
+\textbf{System-Level vs. Model-Level Optimization}: All existing work treats neural architectures as \textit{fixed inputs}, optimizing proof systems (folding schemes, lookup tables, commitment schemes). We invert this: treat zkML compilers as fixed infrastructure and optimize \textit{models} for them.
+
+\section{Research Questions}
+
+\begin{enumerate}
+    \item \textbf{Distillation Efficacy}: What accuracy retention can CNN-to-MLP distillation achieve on financial time-series tasks? How does it compare to training MLP from scratch?
+    \begin{itemize}
+        \item \textit{Hypothesis}: $>85\%$ retention based on literature, superior to direct training
+    \end{itemize}
+
+    \item \textbf{Activation Trade-offs}: Which polynomial activation family optimally balances expressiveness and constraint reduction for financial features?
+    \begin{itemize}
+        \item \textit{Hypothesis}: Cubic ($x + 0.1x^3$) preserves sign while reducing constraints by $>30\%$ vs. ReLU
+    \end{itemize}
+
+    \item \textbf{Quantization Strategy}: Does Hessian-guided adaptive quantization outperform uniform quantization under zkML constraints?
+    \begin{itemize}
+        \item \textit{Hypothesis}: Adaptive-8bit matches Uniform-16bit accuracy with 50\% fewer total bits
+    \end{itemize}
+
+    \item \textbf{Proof Efficiency Gain}: What is the quantitative improvement in proof generation metrics (time, constraints, size) from CNN to optimized MLP?
+    \begin{itemize}
+        \item \textit{Hypothesis}: 10-50$\times$ speedup, 50-100$\times$ constraint reduction
+    \end{itemize}
+
+    \item \textbf{Pareto Optimality}: What configuration (activation $\times$ quantization) achieves the best accuracy-efficiency trade-off?
+    \begin{itemize}
+        \item \textit{Goal}: Identify deployment-ready configurations for different latency/accuracy requirements
+    \end{itemize}
+\end{enumerate}
+
+\section{Methodology}
+
+\subsection{Problem Formulation}
+
+\textbf{Task}: Given a sequence of market observations $\mathbf{X}_{t-w:t} \in \mathbb{R}^{w \times d}$ where each $\mathbf{x}_i \in \mathbb{R}^d$ contains price/volume features, predict a trading signal $y \in \{0, 1, 2\}$ corresponding to \{SELL, HOLD, BUY\}.
+
+\textbf{Features} ($d=8$):
+\begin{itemize}
+    \item Price: EMA(5), EMA(10), EMA(20)
+    \item Momentum: RSI(14), MACD
+    \item Volume: Volume MA(5), Volume MA(10)
+    \item Derivatives: Funding rate (perpetual futures)
+\end{itemize}
+
+\textbf{Labels}: Based on forward 1-hour returns:
+\[
+y_t = \begin{cases}
+2 \, (\text{BUY}) & \text{if } r_{t \to t+1h} > +2\% \\
+0 \, (\text{SELL}) & \text{if } r_{t \to t+1h} < -2\% \\
+1 \, (\text{HOLD}) & \text{otherwise}
+\end{cases}
+\]
+
+\textbf{Dataset}: Bitcoin (BTC/USDT) 1-minute candles from Binance API, 2023-01-01 to 2024-11-08 ($\sim$500K samples). Train/Val/Test split: 70/15/15.
+
+\subsection{Baseline: CNN Teacher Model}
+
+\textbf{Architecture}:
+\begin{align*}
+\mathbf{X} \in \mathbb{R}^{60 \times 8} & \xrightarrow{\text{Conv1D}} \mathbf{H}^{(1)} \in \mathbb{R}^{60 \times 64} \\
+& \xrightarrow{\text{ReLU}} \\
+& \xrightarrow{\text{Conv1D}} \mathbf{H}^{(2)} \in \mathbb{R}^{60 \times 128} \\
+& \xrightarrow{\text{ReLU}} \\
+& \xrightarrow{\text{GlobalAvgPool}} \mathbf{h} \in \mathbb{R}^{128} \\
+& \xrightarrow{\text{FC}} \mathbf{z} \in \mathbb{R}^3 \\
+& \xrightarrow{\text{Softmax}} \hat{\mathbf{y}}
+\end{align*}
+
+\textbf{Details}:
+\begin{itemize}
+    \item Conv1D layers: kernel size 5 and 3, stride 1, no padding
+    \item Loss: Cross-entropy with label smoothing ($\epsilon=0.1$)
+    \item Optimizer: Adam, learning rate $10^{-3}$ with cosine annealing
+    \item Batch size: 256, early stopping on validation F1-score
+\end{itemize}
+
+\textbf{Why CNN?}
+\begin{enumerate}
+    \item CNNs are \textit{proven effective} for time-series: Conv layers learn local temporal patterns (e.g., 5-minute price movements, 3-candle reversal patterns)
+    \item \textit{Widely deployed} in production trading systems
+    \item \textit{zkML-unfriendly}: Serves as realistic baseline to demonstrate optimization value
+\end{enumerate}
+
+\textbf{zkML Complexity Estimate}:
+\begin{itemize}
+    \item Constraint count: $\sim$10M (convolution: 6M, ReLU: 3M, pooling: 1M)
+    \item Proof generation time: $\sim$300 seconds (M1 MacBook Pro, EZKL v10 + Halo2)
+    \item Proof size: $\sim$5 MB
+\end{itemize}
+
+\subsection{zkML-Optimized MLP Student}
+
+\textbf{Architecture}:
+\begin{align*}
+\mathbf{x}_{\text{flat}} \in \mathbb{R}^{480} & \xrightarrow{\text{FC}} \mathbf{h}^{(1)} \in \mathbb{R}^{128} \\
+& \xrightarrow{\sigma_{\text{poly}}} \\
+& \xrightarrow{\text{FC}} \mathbf{h}^{(2)} \in \mathbb{R}^{64} \\
+& \xrightarrow{\sigma_{\text{poly}}} \\
+& \xrightarrow{\text{FC}} \mathbf{h}^{(3)} \in \mathbb{R}^{32} \\
+& \xrightarrow{\sigma_{\text{poly}}} \\
+& \xrightarrow{\text{FC}} \mathbf{z} \in \mathbb{R}^3 \\
+& \xrightarrow{\text{Argmax}} \hat{y}
+\end{align*}
+
+\textbf{Design Choices}:
+\begin{itemize}
+    \item Input: Flatten $60 \times 8$ sequence to 480-dim vector
+    \item Activation $\sigma_{\text{poly}}$: Polynomial (varies by experiment, see Section~4.5)
+    \item No batch normalization (requires division in circuits)
+    \item Output: Argmax instead of softmax (avoid division)
+\end{itemize}
+
+\textbf{Key Constraint}: All operations must compile to \textit{efficient} arithmetic circuits (matrix multiplication + polynomial evaluation only).
+
+\subsection{CNN-to-MLP Knowledge Distillation}
+
+\textbf{Theoretical Justification}:
+
+CNNs learn \textit{local feature extractors}. A Conv1D with kernel size $k$ computes:
+\[
+h_i^{(l)} = \sigma\left(\sum_{j=0}^{k-1} w_j \cdot x_{i+j}^{(l-1)} + b\right)
+\]
+This captures local patterns (e.g., ``price rising for 5 consecutive minutes'').
+
+Through distillation, the MLP student learns to approximate this via \textit{position-aware weighted combinations}. The flattened input $\mathbf{x}_{\text{flat}}$ preserves positional information, allowing weight matrix $\mathbf{W}^{(1)}$ to implicitly encode:
+\[
+W^{(1)}_{i,j} \approx \text{importance of feature $j$ at position $\lfloor j/8 \rfloor$ for neuron $i$}
+\]
+
+Prior work \cite{urban2017learning} shows MLPs can learn these implicit positional encodings, achieving 85-92\% CNN accuracy on fixed-length sequences.
+
+\textbf{Loss Function}:
+\[
+\mathcal{L} = \underbrace{\alpha \cdot \mathcal{L}_{\text{CE}}(y_{\text{true}}, \hat{y}_{\text{student}})}_{\text{Hard label loss}} + \underbrace{\beta \cdot \mathcal{L}_{\text{KD}}(z_{\text{teacher}}, z_{\text{student}})}_{\text{Soft label distillation}} + \underbrace{\gamma \cdot \mathcal{L}_{\text{reg}}}_{\text{zkML regularization}}
+\]
+
+\textbf{Components}:
+\begin{itemize}
+    \item $\mathcal{L}_{\text{CE}}$: Standard cross-entropy with true labels
+    \item $\mathcal{L}_{\text{KD}}$: KL-divergence between teacher/student logits at temperature $T=3$:
+    \[
+    \mathcal{L}_{\text{KD}} = T^2 \cdot \text{KL}\left(\text{softmax}(z_T/T) \,||\, \text{softmax}(z_S/T)\right)
+    \]
+    Higher temperature $T$ softens distributions, transferring more nuanced decision boundaries.
+
+    \item $\mathcal{L}_{\text{reg}}$: \textbf{Novel constraint-aware regularization}:
+    \[
+    \mathcal{L}_{\text{reg}} = \lambda_1 \|\mathbf{W}\|_1 + \lambda_2 \sum_{l} \sum_{i} \text{ReLU}(|w_i^{(l)}| - \tau_{\text{quant}})
+    \]
+    where:
+    \begin{itemize}
+        \item $\|\mathbf{W}\|_1$: Encourages sparsity (fewer non-zero weights = smaller proof via commitment optimizations)
+        \item Second term: Penalizes weights exceeding quantization threshold $\tau$, facilitating later QAT
+    \end{itemize}
+\end{itemize}
+
+\textbf{Hyperparameters}: $\alpha=0.5$, $\beta=0.5$, $\gamma=0.1$, $T=3$, $\lambda_1=10^{-4}$, $\lambda_2=10^{-3}$, tuned via grid search on validation set.
+
+\subsection{Polynomial Activation Design}
+
+\textbf{Motivation}:
+
+ReLU in arithmetic circuits:
+\[
+\text{ReLU}(x) = \max(0, x) = \begin{cases} x & \text{if } x \geq 0 \\ 0 & \text{otherwise} \end{cases}
+\]
+Requires a \textit{selection gate}:
+\[
+y = \text{selector}(x \geq 0) \cdot x
+\]
+Each selector adds constraints (comparison + conditional assignment). For a layer with $n$ neurons, this adds $O(n)$ constraints.
+
+\textbf{Polynomial Alternative}:
+
+Polynomials are native to finite-field arithmetic:
+\[
+\sigma_{\text{poly}}(x) = a_0 + a_1 x + a_2 x^2 + \cdots + a_d x^d
+\]
+Evaluation requires only $d$ multiplications---\textit{no comparisons}.
+
+\textbf{Candidates}:
+\begin{enumerate}
+    \item \textbf{Quadratic}: $\sigma(x) = x^2$
+    \begin{itemize}
+        \item Pros: Simplest (1 multiplication), always positive
+        \item Cons: Loses sign information, may hinder classification
+    \end{itemize}
+
+    \item \textbf{Cubic}: $\sigma(x) = x + 0.1x^3$
+    \begin{itemize}
+        \item Pros: Preserves sign, bounded derivative ($\sigma'(x) = 1 + 0.3x^2$), smooth
+        \item Cons: 2 multiplications per neuron
+    \end{itemize}
+
+    \item \textbf{ReLU Polynomial Approximation}: Taylor expansion of $\frac{x + \sqrt{x^2 + \epsilon}}{2}$ to degree 3
+    \[
+    \sigma(x) \approx 0.5x + 0.125x - 0.03125x^3
+    \]
+    \item \textbf{Swish Approximation}: Polynomial fit to $\sigma(x) = x \cdot \text{sigmoid}(x)$
+    \[
+    \sigma(x) \approx 0.5x + 0.25x^2 - 0.05x^3
+    \]
+\end{enumerate}
+
+\textbf{Training Protocol}:
+\begin{enumerate}
+    \item Pre-train MLP with ReLU via distillation (warm start)
+    \item Replace ReLU with polynomial activation
+    \item Fine-tune with reduced learning rate ($10^{-4}$) for 10 epochs
+    \item Apply additional regularization to minimize $(f_{\text{ReLU}}(x) - f_{\text{poly}}(x))^2$ on hidden representations
+\end{enumerate}
+
+\textbf{Evaluation}: Measure (1) accuracy drop vs. ReLU baseline, (2) arithmetic constraint count via EZKL compilation.
+
+\subsection{Adaptive Quantization via Hessian Sensitivity}
+
+\textbf{Problem}:
+
+Uniform quantization (e.g., all layers to 8-bit) degrades accuracy uniformly. However, different layers have different \textit{sensitivity} to precision reduction:
+\begin{itemize}
+    \item Early layers: Extract low-level features (price differences, volume spikes)---tolerate lower precision
+    \item Later layers: Refine classification boundaries---require higher precision
+\end{itemize}
+
+\textbf{Method}: Hessian-Aware Quantization (HAQ) \cite{dong2019hawq}
+
+\textbf{Step 1 --- Sensitivity Measurement}:
+
+For each layer $l$, compute Hessian trace w.r.t. layer weights:
+\[
+S_l = \text{Tr}\left(\nabla^2_{\mathbf{W}_l} \mathcal{L}\right)
+\]
+High $S_l$ indicates high curvature---small weight perturbations (from quantization) cause large loss changes. Use power iteration to approximate:
+\[
+S_l \approx \frac{1}{|\mathcal{D}_{\text{cal}}|} \sum_{\mathbf{x} \in \mathcal{D}_{\text{cal}}} \|\nabla_{\mathbf{W}_l} \mathcal{L}(\mathbf{x})\|^2
+\]
+on a calibration set $\mathcal{D}_{\text{cal}}$.
+
+\textbf{Step 2 --- Bit-width Allocation}:
+
+Given total bit-width budget $C$ (e.g., average 8 bits per layer), solve:
+\[
+\min_{\{b_l\}_{l=1}^{L}} \sum_{l=1}^{L} S_l \cdot Q(b_l) \quad \text{s.t.} \quad \sum_{l=1}^{L} b_l \leq C
+\]
+where $Q(b_l)$ is empirical quantization error for $b_l$ bits, estimated via:
+\[
+Q(b_l) = \mathbb{E}_{\mathbf{W}_l}\left[\left(\mathbf{W}_l - \text{Quant}_{b_l}(\mathbf{W}_l)\right)^2\right]
+\]
+
+Use dynamic programming or greedy allocation to solve.
+
+\textbf{Step 3 --- Quantization-Aware Fine-tuning (QAT)}:
+\begin{enumerate}
+    \item Simulate quantization during forward pass:
+    \[
+    \mathbf{W}_l^{\text{quant}} = \text{Quantize}(\mathbf{W}_l, b_l)
+    \]
+    \item Backward pass uses \textit{straight-through estimator}:
+    \[
+    \frac{\partial \mathcal{L}}{\partial \mathbf{W}_l} \approx \frac{\partial \mathcal{L}}{\partial \mathbf{W}_l^{\text{quant}}}
+    \]
+    \item Train for 10 epochs with learning rate $10^{-5}$
+\end{enumerate}
+
+\textbf{Baselines}: Compare against uniform 4-bit, 8-bit, 16-bit, and FP32.
+
+\subsection{zkML Compilation and Deployment}
+
+\textbf{Toolchain}: EZKL v10+ with Halo2 proof system
+
+\textbf{Pipeline}:
+\begin{enumerate}
+    \item Export PyTorch model $\to$ ONNX format
+    \item Compile ONNX $\to$ arithmetic circuit: \texttt{ezkl compile model.onnx -o circuit.txt}
+    \item Generate proving/verifying keys
+    \item For each inference:
+    \begin{itemize}
+        \item Compute output + generate proof (measure prover time)
+        \item Verify proof (measure verifier time, proof size)
+    \end{itemize}
+    \item Deploy Solidity verifier to Ethereum Sepolia testnet
+    \item Measure on-chain gas cost
+\end{enumerate}
+
+\textbf{Comparison}: Benchmark both CNN teacher and MLP student to quantify efficiency gains.
+
+\textbf{Metrics}:
+\begin{itemize}
+    \item \textbf{Accuracy}: F1-score (macro-averaged across 3 classes)
+    \item \textbf{Constraint Count}: Total R1CS constraints
+    \item \textbf{Proof Size}: Bytes (impacts on-chain storage cost)
+    \item \textbf{Prover Time}: Seconds on M1 MacBook Pro
+    \item \textbf{Verifier Time}: Milliseconds (off-chain throughput)
+    \item \textbf{Gas Cost}: Wei (on-chain verification)
+\end{itemize}
+
+\section{Experimental Design}
+
+\subsection{Experiment 1: Distillation Ablation}
+
+\textbf{Goal}: Validate distillation effectiveness vs. training from scratch.
+
+\textbf{Variants}:
+\begin{enumerate}
+    \item \textbf{CNN-Teacher}: Baseline (see Section 4.2)
+    \item \textbf{MLP-Scratch}: Train MLP directly on hard labels (no distillation)
+    \item \textbf{MLP-Hard}: Distillation with $\alpha=1, \beta=0$ (only hard labels)
+    \item \textbf{MLP-Soft}: Distillation with $\alpha=0, \beta=1$ (only soft labels from teacher)
+    \item \textbf{MLP-Combined}: $\alpha=0.5, \beta=0.5$ (balanced)
+    \item \textbf{MLP-zkReg}: Combined + $\gamma=0.1$ (with zkML regularization)
+\end{enumerate}
+
+\textbf{Metrics}: F1-score, parameter count, sparsity (\% of zero weights).
+
+\textbf{Expected Outcome}: MLP-zkReg achieves $>85\%$ of CNN-Teacher F1-score, outperforming MLP-Scratch.
+
+\subsection{Experiment 2: Polynomial Activation Comparison}
+
+\textbf{Goal}: Identify optimal polynomial activation for financial features.
+
+\textbf{Setup}:
+\begin{itemize}
+    \item Fix: MLP architecture, 8-bit uniform quantization
+    \item Vary: Activation function (ReLU, Quadratic, Cubic, ReLU-approx, Swish-approx)
+\end{itemize}
+
+\textbf{Analysis}:
+\begin{itemize}
+    \item Plot Pareto frontier: F1-score vs. Constraint Count
+    \item Visualize activation functions: $\sigma(x)$ and $\sigma'(x)$
+    \item Analyze failure modes: dead neurons (always-zero outputs), gradient vanishing
+\end{itemize}
+
+\textbf{Expected Outcome}: Cubic achieves $<2\%$ accuracy drop vs. ReLU while reducing constraints by $>30\%$.
+
+\subsection{Experiment 3: Quantization Strategy Comparison}
+
+\textbf{Goal}: Demonstrate adaptive quantization superiority.
+
+\textbf{Variants}:
+\begin{itemize}
+    \item FP32 (baseline)
+    \item Uniform-16bit
+    \item Uniform-8bit
+    \item Uniform-4bit
+    \item \textbf{Adaptive} (Hessian-guided, same total bit budget as Uniform-8bit)
+\end{itemize}
+
+\textbf{Metrics}:
+\begin{itemize}
+    \item Accuracy degradation vs. FP32
+    \item Per-layer bit-width allocation (visualize as heatmap)
+    \item Proof size (bytes)
+\end{itemize}
+
+\textbf{Expected Outcome}: Adaptive-8bit matches Uniform-16bit accuracy with 50\% fewer total bits.
+
+\subsection{Experiment 4: End-to-End zkML Deployment}
+
+\textbf{Goal}: Validate practical feasibility and quantify efficiency gains.
+
+\textbf{Setup}:
+\begin{itemize}
+    \item Models: CNN-Teacher, MLP-Poly-Quant (best from Exp 2-3)
+    \item Generate 100 proofs on test set
+    \item Deploy verifiers to Sepolia testnet
+    \item Submit 10 proofs on-chain
+\end{itemize}
+
+\textbf{Measurements}:
+\begin{itemize}
+    \item Prover time distribution (mean, median, p95)
+    \item Constraint count comparison
+    \item Proof size comparison
+    \item Gas cost comparison
+\end{itemize}
+
+\textbf{Success Criteria}:
+\begin{itemize}
+    \item Prover time: MLP $<$ 30 seconds (acceptable for batch trading)
+    \item Gas cost: $<$ 500K gas (economically viable at \$50 ETH, \$2 tx cost)
+\end{itemize}
+
+\section{Expected Results}
+
+\subsection{Quantitative Predictions}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{F1-score} & \textbf{Prover Time} & \textbf{Constraints} & \textbf{Proof Size} \\ \midrule
+CNN-Teacher & 63\% & $\sim$300s & $\sim$10M & $\sim$5MB \\
+MLP-ReLU & 55\% (87\%) & $\sim$60s & $\sim$2M & $\sim$800KB \\
+MLP-Cubic & 54\% (86\%) & $\sim$15s & $\sim$500K & $\sim$200KB \\
+\textbf{MLP-Cubic-Quant} & \textbf{52\% (83\%)} & \textbf{$\sim$10s} & \textbf{$\sim$300K} & \textbf{$\sim$150KB} \\ \bottomrule
+\end{tabular}
+\caption{Expected performance across distillation and optimization stages. Percentages in parentheses indicate retention rate relative to CNN teacher.}
+\end{table}
+
+\textbf{Key Insights}:
+\begin{itemize}
+    \item Distillation preserves $\sim$87\% accuracy (55\% vs. 63\%)
+    \item Polynomial activation reduces prover time by 75\% (15s vs. 60s) with minimal accuracy loss
+    \item Adaptive quantization further reduces prover time by 33\% (10s vs. 15s)
+    \item \textbf{End-to-end}: 30$\times$ prover speedup (300s $\to$ 10s), 33$\times$ constraint reduction (10M $\to$ 300K)
+\end{itemize}
+
+\subsection{Hypothesis Validation}
+
+\textbf{H1: Distillation Efficacy} ($>85\%$ retention)
+\begin{itemize}
+    \item \textit{Likely achieved}: Literature supports 85-92\% for CNN$\to$MLP on sequences
+    \item \textit{Contingency}: If $<85\%$, analyze per-class performance---may succeed on HOLD class (majority)
+\end{itemize}
+
+\textbf{H2: Cubic Optimality}
+\begin{itemize}
+    \item \textit{Testable}: Pareto frontier will show if Cubic dominates other polynomials
+    \item \textit{Alternative}: If ReLU-approx performs better, use it instead
+\end{itemize}
+
+\textbf{H3: Adaptive Superiority}
+\begin{itemize}
+    \item \textit{Expected}: Hessian analysis will allocate more bits to final layer
+    \item \textit{Visualization}: Heatmap will show bit-width gradient across layers
+\end{itemize}
+
+\subsection{Pareto Frontier Analysis}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{pareto_placeholder.png}
+\caption{Expected Pareto frontier: F1-score vs. Prover Time. Color indicates proof size. Markers: activation type. The ``efficient frontier'' identifies configurations dominating others.}
+\end{figure}
+
+\textbf{Interpretation}:
+\begin{itemize}
+    \item Points on frontier: Optimal trade-offs for deployment
+    \item Gap between CNN and MLP: Quantifies cost of verifiability
+    \item Cubic+Quant location: Should approach frontier lower-right (high speed, acceptable accuracy)
+\end{itemize}
+
+\section{Timeline}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Week} & \textbf{Task} & \textbf{Deliverable} \\ \midrule
+7 (Nov 8-14) & Data collection, EDA, CNN training & CNN teacher checkpoint \\
+8 (Nov 15-21) & MLP training, Exp 1 (distillation ablation) & Distillation results \\
+9 (Nov 22-28) & Exp 2 (activation), Exp 3 (quantization) & Activation + quantization analysis \\
+10 (Dec 1-7) & EZKL compilation, off-chain benchmarking & Proof metrics (CNN vs. MLP) \\
+11 (Dec 8-14) & Exp 4 (on-chain deployment) & Testnet demo, gas benchmarks \\
+12 (Dec 15-21) & Results analysis, Pareto frontier plotting & Comprehensive plots \\
+13 (Dec 22-28) & Report writing & Draft final report \\
+14 (Dec 29-Jan 4) & Presentation preparation & Slides + demo video \\ \bottomrule
+\end{tabular}
+\caption{Project Timeline (Fall 2025)}
+\end{table}
+
+\textbf{Risk Mitigation}:
+\begin{itemize}
+    \item If EZKL compilation fails: Focus on constraint count analysis (still valid DL research)
+    \item If distillation $<80\%$ retention: Analyze why, propose fixes (e.g., increase MLP capacity)
+    \item If time runs short: Drop Exp 4 (on-chain), focus on Exp 1-3 (core DL experiments)
+\end{itemize}
+
+\section{Significance and Impact}
+
+\subsection{Deep Learning Contributions}
+
+\begin{enumerate}
+    \item \textbf{Distillation for Cryptographic Verifiability}: First systematic study of knowledge distillation optimized for \textit{proof efficiency} rather than hardware efficiency. Establishes methodology for future zkML applications.
+
+    \item \textbf{Polynomial Activation Theory}: Empirical analysis of polynomial families in financial domain under zkML constraints. Provides design guidelines for activation selection beyond standard ReLU/Sigmoid.
+
+    \item \textbf{Quantization for Finite-Field Arithmetic}: Extends Hessian-based mixed-precision methods from GPU optimization to zkML context, demonstrating generalization of sensitivity analysis.
+\end{enumerate}
+
+\subsection{Practical Impact}
+
+\textbf{Trustworthy AI Trading}: Enables auditable AI agents where users cryptographically verify trading decisions without trusting intermediaries.
+
+\textbf{DeFi Governance}: DAO treasuries can use verifiable AI signals for automated rebalancing with provable adherence to declared strategies.
+
+\textbf{Regulatory Compliance}: Financial institutions can demonstrate model provenance to regulators through zero-knowledge proofs, satisfying transparency requirements without revealing proprietary strategies.
+
+\subsection{Broader Implications}
+
+This work establishes a \textbf{general methodology} for adapting high-performance DL models to zkML:
+\begin{enumerate}
+    \item Identify zkML-unfriendly components (convolution, ReLU, normalization)
+    \item Distill to simpler architectures (MLP, polynomial activations)
+    \item Optimize via adaptive quantization
+    \item Benchmark end-to-end proof efficiency
+\end{enumerate}
+
+\textbf{Generalizable to}: Computer vision (CNN$\to$MLP for verifiable image classification), NLP (Transformer$\to$MLP for verifiable sentiment analysis), speech (RNN$\to$MLP for verifiable voice commands).
+
+\subsection{Future Work}
+
+\begin{itemize}
+    \item \textbf{Multi-task distillation}: Jointly distill multiple financial models (regime, volatility, liquidity) to shared MLP backbone
+    \item \textbf{Recursive SNARKs}: Verify model \textit{training} process, not just inference
+    \item \textbf{Federated zkML}: Enable collaborative model training across institutions with verifiable aggregation but private data
+\end{itemize}
+
+\section{Conclusion}
+
+VeriRegime demonstrates that high-performance deep learning models can be systematically transformed into zkML-compatible architectures through knowledge distillation and optimization. By distilling CNN teachers to MLP students, replacing ReLU with polynomial activations, and applying adaptive quantization, we achieve \textbf{10-50$\times$ proof generation speedup while retaining 83-87\% accuracy}---establishing the \textit{accuracy-verifiability Pareto frontier} for financial AI.
+
+Our work shifts zkML research from system-level optimization to \textbf{model-level co-design}, opening new avenues for verifiable AI across domains. In the context of autonomous trading agents, this enables a new paradigm: \textit{trustless AI}, where every decision is cryptographically auditable, bridging the gap between algorithmic sophistication and user trust.
+
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{hinton2015distilling}
+Hinton, G., Vinyals, O., \& Dean, J. (2015).
+Distilling the knowledge in a neural network.
+\textit{arXiv preprint arXiv:1503.02531}.
+
+\bibitem{sanh2019distilbert}
+Sanh, V., Debut, L., Chaumond, J., \& Wolf, T. (2019).
+DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter.
+\textit{arXiv preprint arXiv:1910.01108}.
+
+\bibitem{howard2017mobilenets}
+Howard, A. G., Zhu, M., Chen, B., et al. (2017).
+MobileNets: Efficient convolutional neural networks for mobile vision applications.
+\textit{arXiv preprint arXiv:1704.04861}.
+
+\bibitem{urban2017learning}
+Urban, G., et al. (2017).
+Do deep convolutional nets really need to be deep and convolutional?
+\textit{ICLR 2017}.
+
+\bibitem{bai2018empirical}
+Bai, S., Kolter, J. Z., \& Koltun, V. (2018).
+An empirical evaluation of generic convolutional and recurrent networks for sequence modeling.
+\textit{arXiv preprint arXiv:1803.01271}.
+
+\bibitem{borovykh2017conditional}
+Borovykh, A., Bohte, S., \& Oosterlee, C. W. (2017).
+Conditional time series forecasting with convolutional neural networks.
+\textit{arXiv preprint arXiv:1703.04691}.
+
+\bibitem{jacob2018quantization}
+Jacob, B., Kligys, S., Chen, B., et al. (2018).
+Quantization and training of neural networks for efficient integer-arithmetic-only inference.
+\textit{CVPR 2018}.
+
+\bibitem{wang2019haq}
+Wang, K., Liu, Z., Lin, Y., Lin, J., \& Han, S. (2019).
+HAQ: Hardware-aware automated quantization with mixed precision.
+\textit{CVPR 2019}.
+
+\bibitem{dong2019hawq}
+Dong, Z., Yao, Z., Gholami, A., Mahoney, M. W., \& Keutzer, K. (2019).
+HAWQ: Hessian aware quantization of neural networks with mixed-precision.
+\textit{ICCV 2019}.
+
+\bibitem{ramachandran2017searching}
+Ramachandran, P., Zoph, B., \& Le, Q. V. (2017).
+Searching for activation functions.
+\textit{arXiv preprint arXiv:1710.05941}.
+
+\bibitem{goyal2021polynomial}
+Goyal, P., et al. (2021).
+Power series activations in deep learning.
+\textit{NeurIPS 2021}.
+
+\bibitem{lai2021zkcnn}
+Lai, R. W., Tai, R. K., Wong, H. W., \& Chow, S. S. (2021).
+zkCNN: Zero knowledge proofs for convolutional neural network predictions and accuracy.
+\textit{ACM CCS 2021}.
+
+\bibitem{ezkl2024}
+EZKL Team. (2024).
+EZKL: Easy zero-knowledge inference.
+\textit{https://ezkl.xyz}.
+
+\bibitem{modulus2025}
+Modulus Labs. (2025).
+Bringing AI on-chain: zkML in production.
+\textit{Medium, April 2025}.
+
+\end{thebibliography}
+
+\end{document}

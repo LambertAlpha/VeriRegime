@@ -1,0 +1,140 @@
+% !TEX program = pdflatex
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, graphicx, booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{natbib}
+\usepackage{indentfirst}
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0em}
+\setstretch{2.0}
+
+\begin{document}
+
+\vspace*{\fill}
+\begin{center}
+    {\Large \textbf{VeriRegime: On-Chain Verifiable Market Regime Classification with zkML}}\\[0.3em]
+    \vspace{14em}
+    {\large Lin Boyi \quad 123090327}\\[0.3em]
+    {\large The Chinese University of Hong Kong, Shenzhen}\\[0.3em]
+    {\large DDA4220: Deep Learning}\\[0.3em]
+    {\large October 15, 2025}
+\end{center}
+\vspace*{\fill}
+
+\newpage
+
+\section*{Abstract}
+Zero-knowledge machine learning (zkML) enables verifiable inference---allowing model predictions to be mathematically proven correct without exposing parameters or data. While most zkML research focuses on system-level efficiency and general AI benchmarks, few studies explore interpretable, domain-specific deployments. This project proposes \textbf{VeriRegime}, an on-chain verifiable deep learning framework for \textbf{market regime classification}---determining bullish, bearish, or sideways conditions in crypto markets. By combining compact neural architectures, quantization-aware training, and zero-knowledge proof systems (Groth16, Halo2), VeriRegime aims to deliver verifiable, low-latency inference deployable as a blockchain oracle. The work extends an earlier VeriRegime prototype (Lin, 2025) and investigates zkML-friendly model design, adaptive quantization, and activation optimization tailored to financial time-series data.
+
+\section{Introduction}
+Deep learning has achieved notable success in financial forecasting, yet models deployed in trading stacks often remain opaque and unverifiable. In decentralized finance (DeFi) and autonomous trading agents, this opacity introduces trust risk: counterparties must take model claims on faith, undermining transparency mandates and auditability. Zero-knowledge proofs (ZKPs), particularly succinct non-interactive arguments of knowledge (zkSNARKs), offer a cryptographic mechanism to verify computation correctness without revealing proprietary inputs or weights.
+
+Integrating ZKPs with machine learning yields \textit{zero-knowledge machine learning} (zkML), where every inference can be accompanied by a proof of correctness. Existing zkML pipelines demonstrate technical feasibility on canonical benchmarks, but practical, domain-specific financial applications remain underexplored. This project targets that gap by delivering \textbf{on-chain verifiable regime classification}---transforming model predictions of bullish, bearish, or sideways markets into proof-carrying statements that smart contracts can trust.
+
+The proposed research focuses on designing zkML-friendly neural architectures, compiling them into efficient circuits, and deploying verifiers on-chain. Through end-to-end evaluation, VeriRegime will surface the trade-offs between accuracy, proof size, and latency that govern whether verifiable AI signals can support real-world DeFi strategies and governance.
+
+\section{Literature Review}
+\textbf{System-level zkML.} Early frameworks such as \textbf{zkCNN} \citep{zkCNN2023} and \textbf{ZKML} \citep{ZKML2024} introduced pipelines that convert neural networks into arithmetic circuits compatible with Groth16 proofs. \textbf{Artemis} \citep{Artemis2024} refined commitment handling with commit-and-prove SNARKs, reducing verifier cost and proof size. More recently, \textbf{zkLLM} \citep{zkLLM2024} extended zkML support to transformer-based models using lookup-optimized attention constraints.
+
+\textbf{Proof-system innovation.} Frameworks such as \textbf{Nova} \citep{Nova2023} and \textbf{Plonky2} \citep{Plonky2023} explored recursion and folding schemes for faster incremental proof aggregation. Halo2's recursion-friendly design and lookup tables make it attractive for financial time-series inference, where regime states evolve continuously and require sliding-window evaluation.
+
+\textbf{Blockchain integration.} Projects including the Halo2-based \textbf{EZKL} toolkit and the \textbf{Mina zkML Library} \citep{Mina2025} provide ONNX-to-circuit compilers and code generation for verifier smart contracts. Industrial efforts such as \textbf{Modulus Labs} \citep{Modulus2025} demonstrate AI-on-chain services, showcasing the commercial momentum behind zkML. Nonetheless, literature still lacks domain-specific analysis for financial forecasting or risk management, leaving a research gap that VeriRegime aims to address.
+
+\section{Research Questions}
+\begin{enumerate}[label=\arabic*)]
+    \item How can compact neural architectures (e.g., MLP or lightweight Transformer) be efficiently transformed into zk-verifiable circuits for market regime classification?
+    \item What trade-offs emerge between model accuracy, proof size, and proving time under varying quantization levels and activation functions?
+    \item How does on-chain verification (EVM vs. Mina) influence cost, latency, and deployment complexity?
+    \item Which activation function redesigns or approximations best balance zk-friendliness and predictive power?
+    \item Can adaptive per-layer quantization strategies improve zkML inference efficiency without significant accuracy degradation?
+\end{enumerate}
+
+\section{Methods}
+
+\subsection{Model Design}
+The base model will classify crypto market regimes (bullish, bearish, or sideways) using market and on-chain features: moving-average differentials (EMA5--EMA10), funding rate, open interest change, realized volatility, stablecoin flows, and address growth. A compact MLP (three hidden layers with ReLU activations) will be trained with quantization-aware methods and exported to ONNX format for zk compilation. Teacher-student distillation from an LSTM baseline will emphasize interpretability while retaining predictive strength.
+
+\subsection{zkML Compilation and Proof Generation}
+The ONNX model will be compiled via the \textbf{EZKL} framework (Halo2 backend). Nonlinearities such as ReLU will be approximated with polynomial or selection-gate constraints, and softmax will be replaced by argmax to avoid expensive divisions. For each inference, the circuit will generate:
+\begin{itemize}
+    \item A proving key and verifying key pair (Groth16, Halo2),
+    \item Commitments to model weights and inputs using Poseidon hashes,
+    \item Public inputs: \texttt{model\_commit}, \texttt{input\_commit}, and \texttt{regime\_output}.
+\end{itemize}
+
+\subsection{Verification and Evaluation}
+Proofs will be validated both off-chain and on-chain. On-chain verifiers (EVM and Mina) will measure gas usage, latency, and scalability; off-chain verification will benchmark throughput on commodity hardware. Key performance metrics include accuracy, proof size, proving time, verification latency, and operational cost measured in gas or Mina fees.
+
+\subsection{Experimental Framework}
+Experiments will evaluate:
+\begin{itemize}
+    \item Baseline architectures: LSTM teacher vs. zk-compatible MLP student,
+    \item Quantization ablation: 4--16 bit, uniform vs. adaptive bit-width allocation,
+    \item Activation study: ReLU, polynomial, sigmoid, and lookup-based variants,
+    \item Proof-system comparison: Groth16, Halo2, and exploratory tests with Plonky2 recursion.
+\end{itemize}
+Results will be mapped onto an accuracy--efficiency Pareto frontier to highlight feasible deployment regimes.
+
+\subsection{Model Optimization for zkML Compatibility}
+To further improve verifiability, the project investigates zk-friendly optimization techniques:
+\begin{enumerate}[label=\alph*)]
+    \item \textbf{Quantization-Aware Training (QAT):} Simulate quantization noise during training to preserve accuracy under integer constraints.
+    \item \textbf{Polynomial Activation Networks:} Replace ReLU with low-degree polynomial approximations to reduce arithmetic gate counts.
+    \item \textbf{Pruning and Distillation:} Transfer structure from non-zk-compatible teachers (e.g., LSTM) to compact students with minimal redundant parameters.
+    \item \textbf{Adaptive Quantization:} Dynamically adjust per-layer bit-width to optimize proof time without significant loss in accuracy.
+\end{enumerate}
+
+\section{Timeline}
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Stage} & \textbf{Task} & \textbf{Timeframe (2025)} \\
+\midrule
+Week 7--8 & Data curation, baseline training, QAT experiments & Oct \\
+Week 8--9 & Circuit compilation, proof generation, quantization ablation & Oct \\
+Week 10--11 & On-chain verifier deployment (EVM, Mina) and benchmarking & Nov \\
+Week 12--13 & Extended experiments (activation design, adaptive quantization) & Nov \\
+Week 14 & Final report, presentation, and optional workshop submission & Nov \\
+\bottomrule
+\end{tabular}
+\caption{Project Schedule for Fall 2025}
+\end{table}
+
+\section{Significance of Research}
+This project advances the intersection of AI verifiability and decentralized finance by demonstrating a domain-specific zkML solution. Contributions include:
+\begin{itemize}
+    \item The first \textbf{market-focused zkML application} for crypto regime detection,
+    \item A systematic study of \textbf{zkML-friendly architectures}, activations, and quantization strategies,
+    \item Empirical measurement of the \textbf{accuracy--proof cost Pareto frontier} for financial inference,
+    \item Deployment of an \textbf{on-chain verifiable oracle} that integrates AI inference with blockchain trust assurances,
+    \item Comparative analysis of Groth16, Halo2, and Plonky2 proof systems in a financial context.
+\end{itemize}
+Beyond demonstrating feasibility, VeriRegime establishes design principles for future \textbf{trustworthy, auditable AI systems} underpinning DeFi governance, DAO treasury management, and algorithmic risk controls.
+
+\newpage
+
+\begin{center}
+{\Large\bfseries References}
+\end{center}
+\vspace{1em}
+\begingroup
+\renewcommand{\section}[2]{}%
+\begin{thebibliography}{}
+\bibitem[Artemis(2024)]{Artemis2024} Artemis Team. (2024). Commit-and-Prove SNARKs for Efficient zkML Verification. \textit{CRYPTO 2024}.
+\bibitem[Lai et al.(2023)]{zkCNN2023} Lai, R. et al. (2023). zkCNN: Efficient Verification of Convolutional Neural Networks. \textit{USENIX Security 2023}.
+\bibitem[Mina Protocol(2025)]{Mina2025} Mina Foundation. (2025). Mina zkML Library Developer Guide. \url{https://minaprotocol.com/blog/minas-zkml-library-developer-guide}
+\bibitem[Modulus Labs(2025)]{Modulus2025} Modulus Labs. (2025). Bringing AI On-chain: zkML in Production. \textit{Medium}, April 2025.
+\bibitem[Nova(2023)]{Nova2023} Bünz, B. et al. (2023). Nova: Recursive Zero-Knowledge Proofs of Knowledge. \textit{IACR ePrint 2023}.
+\bibitem[Plonky2(2023)]{Plonky2023} Polygon Team. (2023). Plonky2: Recursive SNARKs for Fast Proof Composition. \textit{Polygon Labs Whitepaper}.
+\bibitem[ZKML(2024)]{ZKML2024} ZKML Authors. (2024). ZKML: An Optimizing System for ML Inference in Zero-Knowledge Proofs. \textit{EuroSys 2024}.
+\bibitem[Zhang et al.(2024)]{zkLLM2024} Zhang, W. et al. (2024). zkLLM: Verifiable Inference for Large Language Models. \textit{arXiv preprint arXiv:2404.16109}.
+\end{thebibliography}
+\endgroup
+
+\end{document}

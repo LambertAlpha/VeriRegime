@@ -1,0 +1,457 @@
+% !TEX program = pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{\textbf{VeriRegime: Deep Learning Model Optimization for\\Zero-Knowledge Verifiable Trading Signal Generation}}
+
+\author{Lin Boyi \quad 123090327\\
+The Chinese University of Hong Kong, Shenzhen\\
+DDA4220: Deep Learning}
+
+\date{November 8, 2025 (Revised)}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The rise of autonomous AI trading agents in decentralized finance (DeFi) introduces a critical trust problem: users cannot verify whether trading signals genuinely originate from AI models or are manually manipulated. Zero-knowledge machine learning (zkML) enables cryptographic verification of model inference, but existing neural architectures incur prohibitive proof generation costs. This project investigates \textbf{deep learning optimization techniques} to design zkML-compatible models for trading signal classification. We focus on three core contributions: (1) \textbf{zkML-aware knowledge distillation} that transfers LSTM teacher knowledge to compact MLP students optimized for proof generation; (2) \textbf{polynomial activation networks} that replace ReLU with low-degree approximations to reduce arithmetic constraints; (3) \textbf{sensitivity-guided adaptive quantization} that allocates per-layer bit-widths based on Hessian analysis. Through systematic ablation studies, we map the Pareto frontier between model accuracy and proof efficiency, establishing design principles for verifiable financial AI systems.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{Motivation: The Trust Problem in AI Trading}
+
+Autonomous AI trading agents are proliferating in cryptocurrency markets, with platforms like ai16z and Virtual Protocol managing millions in assets. However, a fundamental trust gap exists: \textbf{users cannot verify that trading decisions genuinely come from AI models rather than human intervention}. This opacity undermines the core value proposition of algorithmic trading---systematic, emotionless decision-making.
+
+Zero-knowledge proofs (ZKPs), particularly succinct non-interactive arguments of knowledge (zkSNARKs), offer a cryptographic solution. By generating a proof alongside each inference, a model can mathematically demonstrate: ``\textit{This output was produced by running model $f$ with parameters $\theta$ on input $x$}''---without revealing $\theta$ or $x$.
+
+\subsection{The Challenge: Neural Networks are Proof-Expensive}
+
+Standard deep learning architectures (LSTMs, Transformers) are \textbf{incompatible with efficient proof generation}:
+\begin{itemize}
+    \item \textbf{Non-linear activations} (ReLU, sigmoid) require expensive selection gates in arithmetic circuits
+    \item \textbf{High-precision weights} (FP32) explode constraint counts when compiled to finite-field arithmetic
+    \item \textbf{Large parameter counts} directly translate to proof size and generation time
+\end{itemize}
+
+Existing zkML research focuses on \textit{system-level} optimizations (proof systems, compilers), but largely ignores \textit{model-level} design. This project addresses the question: \textbf{How should we redesign neural architectures and training procedures to make financial time-series models zkML-friendly while preserving predictive accuracy?}
+
+\subsection{Research Scope and Contributions}
+
+We frame this as a \textbf{deep learning optimization problem} with zkML as a constraint, rather than a blockchain project with ML components. Our contributions are:
+
+\begin{enumerate}
+    \item \textbf{zkML-Aware Distillation Framework}: A teacher-student pipeline where LSTM teachers capture temporal dependencies, and MLP students learn to replicate their behavior with zkML-compatible operations
+
+    \item \textbf{Polynomial Activation Networks}: Systematic study of low-degree polynomial approximations to ReLU, trained with custom regularization to balance approximation error and proof efficiency
+
+    \item \textbf{Sensitivity-Guided Quantization}: Adaptive per-layer bit-width allocation using Hessian-based sensitivity analysis, avoiding the accuracy degradation of uniform quantization
+
+    \item \textbf{Empirical Analysis}: Comprehensive ablation studies mapping the accuracy-proof cost trade-off, validated through end-to-end zkML deployment
+\end{enumerate}
+
+\section{Literature Review}
+
+\subsection{Knowledge Distillation for Model Compression}
+
+Knowledge distillation \cite{hinton2015distilling} transfers dark knowledge from large teacher models to compact students. Recent work explores \textbf{task-specific distillation}: DistilBERT for NLP \cite{sanh2019distilbert}, MobileNet for vision \cite{howard2017mobilenets}. However, \textbf{distillation for zkML compatibility remains unexplored}---our work extends this paradigm by optimizing student architectures for proof generation, not just parameter count.
+
+\subsection{Quantization-Aware Training}
+
+Quantization reduces numerical precision to lower computation and memory costs. Post-training quantization (PTQ) is simple but lossy; quantization-aware training (QAT) \cite{jacob2018quantization} simulates quantization during training to recover accuracy. \textbf{Mixed-precision quantization} \cite{wang2019haq} adaptively assigns bit-widths, but existing methods optimize for hardware efficiency (e.g., INT8 on GPUs), not zkML constraint counts. We adapt sensitivity analysis \cite{dong2019hawq} to the finite-field arithmetic context.
+
+\subsection{Activation Function Design}
+
+ReLU's non-differentiability at zero and unbounded output create challenges for both optimization and circuit compilation. Polynomial activations (e.g., $x^2$, Swish approximations \cite{ramachandran2017searching}) offer differentiability and bounded constraints. \textbf{Our contribution}: systematically evaluate polynomial families for financial time-series under zkML constraints, proposing training-time regularization to minimize approximation error.
+
+\subsection{Zero-Knowledge Machine Learning (zkML)}
+
+Early frameworks like zkCNN \cite{lai2021zkcnn} demonstrated feasibility. Recent systems (EZKL, Modulus Labs) provide production tooling. However, \textbf{all existing work treats neural architectures as fixed inputs}---they optimize proof systems, not models. We invert this: treat zkML compilers as fixed infrastructure and optimize models for them.
+
+\section{Research Questions}
+
+\begin{enumerate}
+    \item \textbf{Distillation Design}: How can we design distillation objectives that preserve temporal reasoning from LSTM teachers while constraining students to zkML-friendly operations (matrix multiplications, polynomial activations)?
+
+    \item \textbf{Activation Trade-offs}: What is the Pareto frontier between polynomial approximation error and arithmetic constraint reduction for common activations (ReLU, Sigmoid, Tanh)? Which polynomial families (power series, Chebyshev, rational functions) are optimal?
+
+    \item \textbf{Adaptive Quantization}: Can Hessian-based sensitivity analysis effectively guide per-layer bit-width allocation in zkML models? How does this compare to uniform quantization and neural architecture search?
+
+    \item \textbf{Generalization}: Do zkML-optimized models maintain accuracy across different market regimes (bull, bear, high/low volatility)? What inductive biases are preserved/lost in distillation?
+
+    \item \textbf{End-to-End Feasibility}: What are the practical limits (proof time, proof size, verification cost) of deploying optimized models via EZKL/Halo2 to Ethereum testnets?
+\end{enumerate}
+
+\section{Methodology}
+
+\subsection{Problem Formulation}
+
+\textbf{Task}: Given a sequence of market observations $\mathbf{x}_{t-w:t} = \{x_{t-w}, \ldots, x_t\}$ where $x_i \in \mathbb{R}^d$ contains price/volume features, predict a trading signal $y \in \{\text{BUY}, \text{HOLD}, \text{SELL}\}$.
+
+\textbf{Features} ($d=8$):
+\begin{itemize}
+    \item EMA(5), EMA(10), EMA(20) --- Exponential moving averages
+    \item RSI, MACD --- Technical indicators
+    \item Volume MA(5), Volume MA(10)
+    \item Funding rate (for perpetual futures)
+\end{itemize}
+
+\textbf{Labels}: Based on forward 1-hour returns:
+\[
+y_t = \begin{cases}
+\text{BUY} & \text{if } r_{t+1h} > +2\% \\
+\text{SELL} & \text{if } r_{t+1h} < -2\% \\
+\text{HOLD} & \text{otherwise}
+\end{cases}
+\]
+
+\textbf{Dataset}: Bitcoin (BTC/USDT) 1-minute candles from Binance API, 2023-2024 (500K samples). Train/Val/Test split: 70/15/15.
+
+\subsection{Baseline: LSTM Teacher Model}
+
+\textbf{Architecture}:
+\begin{itemize}
+    \item Input: $\mathbf{x}_{t-60:t}$ (60-minute sliding window)
+    \item 2-layer LSTM, hidden size 128
+    \item Fully connected layer: 128 $\to$ 3 (softmax)
+    \item Loss: Cross-entropy + label smoothing ($\epsilon=0.1$)
+\end{itemize}
+
+\textbf{Training}: Adam optimizer, learning rate $10^{-3}$ with cosine decay, batch size 256, early stopping on validation F1-score.
+
+\textbf{Purpose}: Establish accuracy upper bound. LSTM's recurrence makes it zkML-incompatible but effective at capturing temporal dependencies.
+
+\subsection{zkML-Compatible MLP Student}
+
+\textbf{Architecture}:
+\begin{itemize}
+    \item Input: $\mathbf{x}_t$ (flattened: $60 \times 8 = 480$ features)
+    \item 3 hidden layers: 480 $\to$ 128 $\to$ 64 $\to$ 32 $\to$ 3
+    \item Activation: \textbf{Polynomial} (degree $d$, varies by experiment)
+    \item No batch normalization (incompatible with zkML)
+    \item Output: Argmax (no softmax---avoid division in circuit)
+\end{itemize}
+
+\textbf{Key Constraint}: All operations must compile to efficient arithmetic circuits.
+
+\subsection{zkML-Aware Knowledge Distillation}
+
+\textbf{Objective}: Train MLP student to mimic LSTM teacher's behavior.
+
+\textbf{Loss Function}:
+\[
+\mathcal{L} = \underbrace{\alpha \cdot \mathcal{L}_{\text{CE}}(y_{\text{true}}, \hat{y}_{\text{student}})}_{\text{Hard label loss}} + \underbrace{\beta \cdot \mathcal{L}_{\text{KD}}(z_{\text{teacher}}, z_{\text{student}})}_{\text{Soft label loss}} + \underbrace{\gamma \cdot \mathcal{L}_{\text{reg}}}_{\text{zkML regularization}}
+\]
+
+\textbf{Components}:
+\begin{itemize}
+    \item $\mathcal{L}_{\text{CE}}$: Standard cross-entropy with true labels
+    \item $\mathcal{L}_{\text{KD}}$: KL-divergence between teacher/student logits at temperature $T=3$
+    \item $\mathcal{L}_{\text{reg}}$: Novel \textbf{constraint-aware regularization}:
+    \[
+    \mathcal{L}_{\text{reg}} = \lambda_1 \|\mathbf{W}\|_1 + \lambda_2 \sum_l \text{ReLU}(|w_l| - \tau_{\text{quant}})
+    \]
+    where the first term encourages sparsity (fewer non-zero weights = smaller proof), and the second penalizes weights exceeding quantization thresholds.
+\end{itemize}
+
+\textbf{Hyperparameters}: $\alpha=0.5$, $\beta=0.5$, $\gamma=0.1$, tuned via grid search.
+
+\subsection{Polynomial Activation Design}
+
+\textbf{Motivation}: ReLU requires selection gates in circuits:
+\[
+\text{ReLU}(x) = \max(0, x) \implies \text{selector} \cdot x
+\]
+Each selector adds constraints. Polynomials are native to arithmetic circuits.
+
+\textbf{Candidates}:
+\begin{enumerate}
+    \item \textbf{Quadratic}: $\sigma(x) = x^2$ (simplest, always positive)
+    \item \textbf{Cubic}: $\sigma(x) = x + 0.1x^3$ (preserves sign, bounded derivative)
+    \item \textbf{ReLU Approximation}: $\sigma(x) = \frac{x + \sqrt{x^2 + \epsilon}}{2}$ Taylor-expanded to degree 3
+    \item \textbf{Swish Approximation}: Polynomial fit to $\sigma(x) = x \cdot \text{sigmoid}(x)$
+\end{enumerate}
+
+\textbf{Training Protocol}:
+\begin{itemize}
+    \item Initialize with pre-trained ReLU model
+    \item Gradually replace activations layer-by-layer (curriculum learning)
+    \item Fine-tune with reduced learning rate ($10^{-4}$)
+\end{itemize}
+
+\textbf{Evaluation}: Measure (1) accuracy drop vs. ReLU, (2) arithmetic constraint count via EZKL compilation.
+
+\subsection{Adaptive Quantization via Sensitivity Analysis}
+
+\textbf{Problem}: Uniform quantization (e.g., all layers to 8-bit) degrades accuracy. Different layers have different sensitivity to precision reduction.
+
+\textbf{Method}: Hessian-Aware Quantization (HAQ) \cite{dong2019hawq}
+
+\textbf{Step 1 --- Sensitivity Measurement}:
+For each layer $l$, compute trace of Hessian w.r.t. layer weights:
+\[
+S_l = \text{Tr}(\nabla^2_{\mathbf{W}_l} \mathcal{L})
+\]
+High $S_l$ indicates high sensitivity---requires more bits.
+
+\textbf{Step 2 --- Bit-width Allocation}:
+Given constraint budget $C$ (total bits across all layers), solve:
+\[
+\min_{\{b_l\}} \sum_l S_l \cdot Q(b_l) \quad \text{s.t.} \quad \sum_l b_l \leq C
+\]
+where $Q(b_l)$ is quantization error for $b_l$ bits (estimated via calibration set).
+
+\textbf{Step 3 --- Quantization-Aware Fine-tuning}:
+\begin{itemize}
+    \item Simulate quantization with allocated bit-widths during forward pass
+    \item Use straight-through estimators for gradients
+    \item Train for 10 epochs with learning rate $10^{-5}$
+\end{itemize}
+
+\textbf{Baselines}: Compare against uniform 4-bit, 8-bit, 16-bit quantization.
+
+\subsection{zkML Compilation and Verification}
+
+\textbf{Toolchain}: EZKL (v10+) with Halo2 proof system
+
+\textbf{Pipeline}:
+\begin{enumerate}
+    \item Export trained PyTorch model to ONNX format
+    \item Compile ONNX $\to$ arithmetic circuit via \texttt{ezkl compile}
+    \item Generate proving/verifying keys
+    \item For each inference:
+    \begin{itemize}
+        \item Compute output + generate proof (prover time measured)
+        \item Verify proof (verifier time + proof size measured)
+    \end{itemize}
+    \item Deploy Solidity verifier contract to Ethereum Sepolia testnet
+    \item Measure on-chain verification gas cost
+\end{enumerate}
+
+\textbf{Metrics}:
+\begin{itemize}
+    \item \textbf{Accuracy}: F1-score, macro-averaged across 3 classes
+    \item \textbf{Proof Size}: Bytes (smaller = more efficient on-chain storage)
+    \item \textbf{Prover Time}: Seconds on M1 MacBook Pro (practical deployment limit)
+    \item \textbf{Verifier Time}: Milliseconds (off-chain throughput)
+    \item \textbf{Gas Cost}: Wei (on-chain verification economic feasibility)
+\end{itemize}
+
+\section{Experimental Design}
+
+\subsection{Experiment 1: Teacher-Student Distillation Ablation}
+
+\textbf{Goal}: Validate that distillation preserves accuracy compared to training MLP from scratch.
+
+\textbf{Variants}:
+\begin{itemize}
+    \item MLP-Scratch: Train MLP directly on hard labels
+    \item MLP-Distill-Hard: $\alpha=1, \beta=0$ (only hard labels from teacher)
+    \item MLP-Distill-Soft: $\alpha=0, \beta=1$ (only soft labels from teacher)
+    \item MLP-Distill-Combined: $\alpha=0.5, \beta=0.5$ (proposed)
+    \item MLP-Distill-zkReg: Combined + $\gamma=0.1$ (with zkML regularization)
+\end{itemize}
+
+\textbf{Metrics}: Accuracy, parameter count, sparsity percentage.
+
+\subsection{Experiment 2: Polynomial Activation Comparison}
+
+\textbf{Goal}: Identify best polynomial family for accuracy-efficiency trade-off.
+
+\textbf{Setup}:
+\begin{itemize}
+    \item Fix architecture (3-layer MLP)
+    \item Fix quantization (8-bit uniform)
+    \item Vary activation: ReLU (baseline), Quadratic, Cubic, ReLU-approx, Swish-approx
+\end{itemize}
+
+\textbf{Analysis}:
+\begin{itemize}
+    \item Plot Pareto frontier: Accuracy vs. Constraint Count
+    \item Visualize activation functions and their derivatives
+    \item Analyze failure modes (dead neurons, gradient vanishing)
+\end{itemize}
+
+\subsection{Experiment 3: Quantization Strategy Comparison}
+
+\textbf{Goal}: Demonstrate adaptive quantization outperforms uniform.
+
+\textbf{Variants}:
+\begin{itemize}
+    \item FP32 (baseline, no quantization)
+    \item Uniform-16bit
+    \item Uniform-8bit
+    \item Uniform-4bit
+    \item Adaptive (Hessian-guided, same total bit budget as Uniform-8bit)
+\end{itemize}
+
+\textbf{Metrics}:
+\begin{itemize}
+    \item Accuracy degradation vs. FP32
+    \item Per-layer bit-width allocation (visualize as heatmap)
+    \item Proof size reduction
+\end{itemize}
+
+\subsection{Experiment 4: End-to-End zkML Deployment}
+
+\textbf{Goal}: Validate practical feasibility on Ethereum testnet.
+
+\textbf{Setup}:
+\begin{itemize}
+    \item Select best model from Experiments 1-3
+    \item Generate 100 proofs on test set
+    \item Deploy verifier to Sepolia testnet
+    \item Submit 10 proofs on-chain
+\end{itemize}
+
+\textbf{Measurements}:
+\begin{itemize}
+    \item Average prover time (acceptable threshold: $<$ 30 seconds)
+    \item Proof size distribution
+    \item On-chain verification gas (acceptable threshold: $<$ 500K gas)
+\end{itemize}
+
+\section{Expected Results and Analysis}
+
+\subsection{Hypothesis 1: Distillation Recovers $>90\%$ of Teacher Accuracy}
+\textbf{Rationale}: Prior work shows distillation preserves $\sim95\%$ accuracy in computer vision. Financial time-series may be harder due to noise, but LSTM's inductive bias should transfer via soft labels.
+
+\textbf{Success Metric}: F1-score gap $<$ 5\% between LSTM teacher and MLP-Distill-zkReg.
+
+\subsection{Hypothesis 2: Cubic Polynomials Offer Best Trade-off}
+\textbf{Rationale}: Quadratic lacks negative outputs (problematic for classification). Degree $>3$ increases constraints without commensurate accuracy gain.
+
+\textbf{Success Metric}: Cubic activation achieves $<2\%$ accuracy drop vs. ReLU while reducing constraints by $>30\%$.
+
+\subsection{Hypothesis 3: Adaptive Quantization Beats Uniform}
+\textbf{Rationale}: Early layers extract low-level features (tolerate low precision), while later layers refine predictions (need higher precision).
+
+\textbf{Success Metric}: Adaptive-8bit matches Uniform-16bit accuracy with 50\% fewer total bits.
+
+\subsection{Pareto Frontier Visualization}
+
+We will generate plots mapping:
+\begin{itemize}
+    \item X-axis: Proof generation time (seconds)
+    \item Y-axis: Model F1-score
+    \item Color: Proof size (bytes)
+    \item Markers: Different configurations (activation $\times$ quantization)
+\end{itemize}
+
+This identifies the ``efficient frontier'' of zkML models suitable for production deployment.
+
+\section{Timeline}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Week} & \textbf{Task} & \textbf{Deliverable} \\ \midrule
+7 (Nov 8-14) & Data collection, EDA, LSTM training & Teacher model checkpoint \\
+8 (Nov 15-21) & MLP student training, Exp 1 (distillation) & Distillation ablation results \\
+9 (Nov 22-28) & Exp 2 (activations), Exp 3 (quantization) & Polynomial + quantization analysis \\
+10 (Dec 1-7) & EZKL compilation, proof benchmarking & Off-chain proof metrics \\
+11 (Dec 8-14) & Exp 4 (on-chain deployment) & Testnet deployment demo \\
+12 (Dec 15-21) & Results analysis, visualization & Pareto frontier plots \\
+13 (Dec 22-28) & Report writing & Draft final report \\
+14 (Dec 29-Jan 4) & Presentation preparation & Final slides + demo video \\ \bottomrule
+\end{tabular}
+\caption{Project Timeline (Fall 2025)}
+\end{table}
+
+\textbf{Risk Mitigation}:
+\begin{itemize}
+    \item If EZKL compilation fails: Focus on off-chain proof benchmarking only (still valid DL research)
+    \item If distillation underperforms: Fall back to training MLP directly with zkML regularization
+    \item If time runs short: Drop Experiment 4 (on-chain deployment) and focus on core DL experiments
+\end{itemize}
+
+\section{Significance and Impact}
+
+\subsection{Deep Learning Contributions}
+
+This project advances neural architecture design for constrained computation:
+\begin{itemize}
+    \item \textbf{Distillation for Verification}: Extends knowledge distillation to the novel objective of proof efficiency
+    \item \textbf{Activation Theory}: Systematic empirical analysis of polynomial activations in financial domain
+    \item \textbf{Adaptive Quantization}: Demonstrates Hessian-based methods generalize beyond hardware optimization to cryptographic constraints
+\end{itemize}
+
+\subsection{Practical Impact}
+
+\textbf{Trustworthy AI Trading}: Enables auditable AI agents where users can verify every trading decision came from the declared model, not human manipulation.
+
+\textbf{DeFi Governance}: DAO treasuries could use verifiable AI signals for automated rebalancing with cryptographic audit trails.
+
+\textbf{Regulatory Compliance}: Financial institutions exploring algorithmic trading can demonstrate model provenance to regulators.
+
+\subsection{Future Work}
+
+\begin{itemize}
+    \item Extend to multi-asset portfolio optimization with verifiable rebalancing
+    \item Explore recursive SNARKs for verifying model \textit{training}, not just inference
+    \item Investigate federated learning with zkML to enable collaborative model training without data sharing
+\end{itemize}
+
+\section{Conclusion}
+
+VeriRegime bridges zero-knowledge cryptography and deep learning optimization to address a real trust gap in autonomous AI trading. By treating zkML compatibility as a first-class constraint in neural architecture design, we establish a principled framework for building verifiable financial AI. Our focus on \textbf{distillation strategies, polynomial activations, and adaptive quantization} represents novel deep learning research with immediate practical applications in decentralized finance.
+
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{hinton2015distilling}
+Hinton, G., Vinyals, O., \& Dean, J. (2015).
+Distilling the knowledge in a neural network.
+\textit{arXiv preprint arXiv:1503.02531}.
+
+\bibitem{sanh2019distilbert}
+Sanh, V., Debut, L., Chaumond, J., \& Wolf, T. (2019).
+DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter.
+\textit{arXiv preprint arXiv:1910.01108}.
+
+\bibitem{howard2017mobilenets}
+Howard, A. G., Zhu, M., Chen, B., et al. (2017).
+MobileNets: Efficient convolutional neural networks for mobile vision applications.
+\textit{arXiv preprint arXiv:1704.04861}.
+
+\bibitem{jacob2018quantization}
+Jacob, B., Kligys, S., Chen, B., et al. (2018).
+Quantization and training of neural networks for efficient integer-arithmetic-only inference.
+\textit{CVPR 2018}.
+
+\bibitem{wang2019haq}
+Wang, K., Liu, Z., Lin, Y., Lin, J., \& Han, S. (2019).
+HAQ: Hardware-aware automated quantization with mixed precision.
+\textit{CVPR 2019}.
+
+\bibitem{dong2019hawq}
+Dong, Z., Yao, Z., Gholami, A., Mahoney, M. W., \& Keutzer, K. (2019).
+HAWQ: Hessian aware quantization of neural networks with mixed-precision.
+\textit{ICCV 2019}.
+
+\bibitem{ramachandran2017searching}
+Ramachandran, P., Zoph, B., \& Le, Q. V. (2017).
+Searching for activation functions.
+\textit{arXiv preprint arXiv:1710.05941}.
+
+\bibitem{lai2021zkcnn}
+Lai, R. W., Tai, R. K., Wong, H. W., \& Chow, S. S. (2021).
+zkCNN: Zero knowledge proofs for convolutional neural network predictions and accuracy.
+\textit{ACM CCS 2021}.
+
+\bibitem{ezkl2024}
+EZKL Team. (2024).
+EZKL: Easy zero-knowledge inference.
+\textit{https://ezkl.xyz}.
+
+\end{thebibliography}
+
+\end{document}
