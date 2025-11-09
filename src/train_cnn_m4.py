@@ -253,7 +253,7 @@ class CNNTrainer:
             return
 
         # 加载最佳模型
-        checkpoint = torch.load(self.best_model_path)
+        checkpoint = torch.load(self.best_model_path, weights_only=False)
         self.model.load_state_dict(checkpoint['model_state_dict'])
 
         print("\n" + "="*60)
