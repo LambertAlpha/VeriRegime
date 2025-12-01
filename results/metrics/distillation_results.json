@@ -1,0 +1,18 @@
+{
+  "teacher": {
+    "params": 35778,
+    "accuracy": 0.7462181760803496,
+    "f1_score": 0.7462700658901967
+  },
+  "student": {
+    "params": 471618,
+    "accuracy": 0.7248341485836598,
+    "f1_score": 0.7218343836176146
+  },
+  "distillation": {
+    "temperature": 4.0,
+    "alpha": 0.7,
+    "compression_ratio": 0.0758622444435963,
+    "performance_retention": 0.9713434647102629
+  }
+}

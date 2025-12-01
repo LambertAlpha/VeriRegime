@@ -11,6 +11,11 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report, con
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
+import os
+
+
+# 获取项目根目录（trainer.py在train/目录中，往上一级是项目根）
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 
 class Trainer:
@@ -113,7 +118,11 @@ class Trainer:
     
     def train(self, epochs, early_stop_patience=10, save_dir='results/checkpoints'):
         """完整训练流程"""
-        save_dir = Path(save_dir)
+        # 使用绝对路径（相对于项目根目录）
+        if not Path(save_dir).is_absolute():
+            save_dir = PROJECT_ROOT / save_dir
+        else:
+            save_dir = Path(save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
         
         no_improve = 0
@@ -164,6 +173,12 @@ class Trainer:
     
     def test(self, checkpoint_path='results/checkpoints/best_model.pth'):
         """测试最佳模型"""
+        # 使用绝对路径（相对于项目根目录）
+        if not Path(checkpoint_path).is_absolute():
+            checkpoint_path = PROJECT_ROOT / checkpoint_path
+        else:
+            checkpoint_path = Path(checkpoint_path)
+        
         # 加载最佳模型
         checkpoint = torch.load(checkpoint_path, weights_only=False)
         self.model.load_state_dict(checkpoint['model_state_dict'])

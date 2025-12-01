@@ -86,3 +86,60 @@ class CNNVolatility(nn.Module):
             preds = torch.argmax(probs, dim=1)
         return preds, probs
 
+
+class MLPStudent(nn.Module):
+    """
+    MLP Student模型（用于知识蒸馏）
+    二分类：低波动(0) vs 高波动(1)
+    
+    架构:
+        输入 (240分钟 × 7特征 = 1680维)
+        → FC(1680→256) + ReLU + Dropout
+        → FC(256→128) + ReLU + Dropout
+        → FC(128→64) + ReLU + Dropout
+        → FC(64→2)
+    
+    设计原则:
+        - 简单3层MLP（后续改为多项式激活）
+        - 参数量 << CNN Teacher
+        - 适合zkML证明生成
+    """
+    
+    def __init__(self, input_dim=1680, hidden_dims=[256, 128, 64], dropout_rate=0.3):
+        super().__init__()
+        
+        self.input_dim = input_dim  # 240 * 7
+        
+        # 构建全连接层
+        layers = []
+        in_dim = input_dim
+        
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout_rate))
+            in_dim = hidden_dim
+        
+        # 输出层
+        layers.append(nn.Linear(in_dim, 2))
+        
+        self.network = nn.Sequential(*layers)
+    
+    def forward(self, x):
+        """前向传播"""
+        # (batch, seq_len, features) → (batch, seq_len * features)
+        batch_size = x.size(0)
+        x = x.view(batch_size, -1)  # 展平
+        
+        logits = self.network(x)
+        
+        return {'logits': logits}
+    
+    def predict(self, x):
+        """预测类别和概率"""
+        with torch.no_grad():
+            output = self.forward(x)
+            probs = F.softmax(output['logits'], dim=1)
+            preds = torch.argmax(probs, dim=1)
+        return preds, probs
+

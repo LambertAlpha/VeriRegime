@@ -37,12 +37,14 @@ DeFi协议（借贷、期权、AMM）需要动态调整风险参数，4小时波
 ```
 VeriRegime/
 ├── train/                  ⭐ 模块化训练组件
-│   ├── models.py          # CNN模型架构
+│   ├── models.py          # CNN Teacher + MLP Student
 │   ├── dataset.py         # 数据加载器
-│   └── trainer.py         # 训练器
+│   ├── trainer.py         # CNN训练器
+│   └── distillation.py    # 知识蒸馏训练器
 │
 ├── notebooks/              ⭐ 训练notebooks
-│   └── train_volatility.ipynb  # 4小时波动率预测训练
+│   ├── train_volatility.ipynb     # 4h波动率CNN训练
+│   └── train_distillation.ipynb  # 知识蒸馏MLP训练
 │
 ├── results/                ⭐ 训练结果
 │   ├── checkpoints/       # 模型checkpoint
@@ -76,7 +78,7 @@ conda activate ml
 pip install -r requirements.txt
 ```
 
-### 2. 训练模型（Jupyter Notebook）
+### 2. 训练CNN Teacher（波动率预测）
 
 ```bash
 # 确保在ml环境中
@@ -88,6 +90,25 @@ jupyter lab
 # 打开 notebooks/train_volatility.ipynb
 # 按顺序执行所有cell
 ```
+
+**预期结果**：
+- 准确率: ~74% ✅ (目标65%)
+- F1分数: ~0.74 ✅ (目标0.63)
+- 模型保存: `results/checkpoints/best_model.pth`
+
+### 3. 知识蒸馏MLP Student（zkML优化）
+
+```bash
+# 继续在ml环境中
+# 打开 notebooks/train_distillation.ipynb
+# 按顺序执行所有cell
+```
+
+**预期结果**：
+- Student准确率: ≥63% (Teacher的85%)
+- 理想准确率: ≥67% (Teacher的90%)
+- 参数压缩: ~85% (36k → 5k)
+- 模型保存: `results/checkpoints/best_student.pth`
 
 ### 3. 关键配置
 
