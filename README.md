@@ -2,8 +2,9 @@
 
 **通过知识蒸馏将高性能CNN优化为zkML友好的MLP用于加密货币波动率预测**
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.5+-red.svg)](https://pytorch.org/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12.12-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.9.1-red.svg)](https://pytorch.org/)
+[![MPS](https://img.shields.io/badge/GPU-MPS-green.svg)](https://developer.apple.com/metal/)
 
 ---
 
@@ -68,17 +69,19 @@ VeriRegime/
 ### 1. 环境配置
 
 ```bash
-# 使用conda环境
-conda create -n veriregime python=3.12
-conda activate veriregime
+# 使用已有的conda ml环境
+conda activate ml
 
-# 安装依赖
+# 如需安装额外依赖
 pip install -r requirements.txt
 ```
 
 ### 2. 训练模型（Jupyter Notebook）
 
 ```bash
+# 确保在ml环境中
+conda activate ml
+
 # 启动Jupyter
 jupyter lab
 

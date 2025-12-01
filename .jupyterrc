@@ -1,0 +1,6 @@
+# Jupyter启动配置
+
+# 使用conda ml环境启动
+# conda activate ml
+# jupyter lab
+
