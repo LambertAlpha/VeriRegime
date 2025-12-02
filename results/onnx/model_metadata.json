@@ -1,0 +1,43 @@
+{
+  "export_time": "2025-12-02T10:41:56.403101",
+  "model": {
+    "type": "MLPStudent",
+    "input_dim": 1680,
+    "hidden_dims": [
+      256,
+      128,
+      64
+    ],
+    "output_dim": 2,
+    "total_params": 471618,
+    "dropout_rate": 0.3
+  },
+  "training": {
+    "best_f1": 0.7256139706787473,
+    "epoch": 25
+  },
+  "onnx": {
+    "path": "../results/onnx/student_model.onnx",
+    "opset_version": 14,
+    "file_size_kb": 13.3232421875,
+    "input_shape": [
+      1,
+      240,
+      7
+    ],
+    "output_shape": [
+      1,
+      2
+    ]
+  },
+  "features": [
+    "ema_5",
+    "ema_10",
+    "ema_20",
+    "rsi",
+    "macd",
+    "volume_ma_5",
+    "volume_ma_10"
+  ],
+  "seq_length": 240
+}

@@ -44,10 +44,18 @@ VeriRegime/
 │
 ├── notebooks/              ⭐ 训练notebooks
 │   ├── train_volatility.ipynb     # 4h波动率CNN训练
-│   └── train_distillation.ipynb  # 知识蒸馏MLP训练
+│   ├── train_distillation.ipynb  # 知识蒸馏MLP训练
+│   └── export_onnx.ipynb          # ONNX模型导出
+│
+├── scripts/                ⭐ 自动化脚本
+│   ├── setup_ezkl.sh              # EZKL环境安装
+│   ├── zkml_generate_proof.sh    # ZK证明生成
+│   └── relabel_volatility.py     # 数据标注
 │
 ├── results/                ⭐ 训练结果
 │   ├── checkpoints/       # 模型checkpoint
+│   ├── onnx/              # ONNX导出模型
+│   └── zkml/              # zkML证明文件
 │   ├── figures/           # 可视化图表
 │   └── logs/              # 训练日志
 │
@@ -110,16 +118,60 @@ jupyter lab
 - 参数压缩: ~85% (36k → 5k)
 - 模型保存: `results/checkpoints/best_student.pth`
 
-### 3. 关键配置
+### 4. zkML转换 🔐
+
+#### 4.1 安装EZKL环境
+
+```bash
+# 安装EZKL和依赖（首次运行）
+./scripts/setup_ezkl.sh
+```
+
+预计时间：5-10分钟
+
+#### 4.2 导出ONNX模型
+
+```bash
+# 打开 notebooks/export_onnx.ipynb
+# 执行所有cell，导出ONNX模型
+```
+
+输出：`results/onnx/student_model.onnx`
+
+#### 4.3 生成ZK证明
+
+```bash
+# 方法1: 使用脚本（推荐）
+./scripts/zkml_generate_proof.sh
+
+# 方法2: 手动逐步执行
+# 详见 ZKML_GUIDE.md
+```
+
+**预期性能**：
+- 证明生成时间：5-10秒
+- 验证时间：50-200ms
+- 证明大小：~128-256KB
+- 预估Gas成本：~300-600K
+
+**详细指南**：参见 `ZKML_GUIDE.md`
+
+### 5. 关键配置
 
 在notebook中可调整：
 
 ```python
+# 训练配置
 SEQ_LENGTH = 240  # 4小时窗口
 BATCH_SIZE = 512
 EPOCHS = 50
 LR = 1e-3
-DROPOUT = 0.3  # 需传给模型
+DROPOUT = 0.3
+
+# zkML配置
+ONNX_OPSET = 14  # EZKL推荐
+INPUT_SCALE = 7  # 量化精度
+PARAM_SCALE = 7
 ```
 
 ---
