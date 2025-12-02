@@ -1,12 +1,13 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 venv/
 env/
 ENV/
+.env
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -22,21 +23,30 @@ ENV/
 .AppleDouble
 .LSOverride
 
-# Training logs (optional - uncomment if you don't want to track)
-# nohup.out
-# *.log
-
 # LaTeX
 *.aux
 *.fdb_latexmk
 *.fls
-*.log
 *.out
 *.synctex.gz
 *.bak
+*.bbl
+*.blg
+*.lof
+*.lot
+*.toc
+*.pdf
+docs/.latex_output_backup/
 
 # Large files (uncomment if data is too large for git)
 # data/*.csv
+
+# Logs and build artifacts
+*.log
+nohup.out
+build/
+docs/build/
+dist/
 
 # Temporary files
 *.tmp
